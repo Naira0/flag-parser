@@ -6,9 +6,9 @@
 #include <string>
 #include <unordered_map>
 #include <charconv>
+#include <thread>
 
-#include <iostream>
-
+// TODO weird ass bug that makes it so some values wont ever be changed usually the first value set.
 namespace flag
 {
     // the type of a flag
@@ -17,8 +17,22 @@ namespace flag
         String, Number, Bool 
     };
 
+    struct Result
+    {
+        // if set to true the parser had no errors
+        bool ok = true;
+        // the flag id that caused the error. likely an incorrect flag id was used
+        std::string_view flag_id;
+        // the error message
+        std::string_view error;
+    };
+
     // the variant used to store flag data
     using FlagData = std::variant<std::string_view, double, bool>;
+
+    struct Flag;
+
+    typedef Result (*FlagFn)(Flag&);
 
     struct Flag 
     {
@@ -37,10 +51,13 @@ namespace flag
         // the flag aliases
         std::initializer_list<std::string_view> aliases;
 
+        FlagFn fn = nullptr;
+
         // will be set to true if the flag is ever triggered
         bool triggered = false;
 
     };
+
 
     using FlagTable = std::unordered_map<std::string_view, Flag*>;
     using Flags     = std::vector<Flag>;
@@ -53,15 +70,7 @@ namespace flag
         bool strict_flags = true;
     };
 
-    struct Result 
-    {
-        // if set to true the parser had no errors
-        bool ok = true;
-        // the flag id that caused the error. likely an incorrect flag id was used
-        std::string_view flag_id;
-        // the error message
-        std::string_view error;
-    };
+
 
     class Parser 
     {
@@ -150,6 +159,23 @@ namespace flag
             return Result{};
         }
 
+        // calls all flag functions. returns the first result that has an error.
+        Result call()
+        {
+            for (Flag &flag : m_flags)
+            {
+                if (flag.triggered && flag.fn)
+                {
+                    Result result = (*flag.fn)(flag);
+
+                    if (!result.ok)
+                        return result;
+                }
+            }
+
+            return {};
+        }
+
         /*
         * returns an array of flags
 
@@ -212,7 +238,6 @@ namespace flag
 
             if (str.size() <= size)
                 return false;
-
 
             for (size_t i = 0; i < size; i++)
             {

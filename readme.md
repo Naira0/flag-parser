@@ -3,15 +3,28 @@ A robust flag parser.
 
 ## Usage
 ```cpp
+#include <iostream>
+#include <variant>
+
+#include "flags.hpp"
+
+using namespace flag;
+
+Result b_fn(Flag &flag)
+{
+    std::cout << flag.name << " was triggered!\n";
+    return {};
+}
+
+void report_result(Result result)
+{
+    std::cout << "error on flag " << result.flag_id << " error: " << result.error << '\n';
+}
+
 int main(int argc, char **argv)
 {
-    using namespace flag;
 
-    Parser parser(std::span{argv, (size_t)argc}, Options{
-        .flag_prefix = "--",
-        // will fail if an incorrect flag is used
-        .strict_flags = true,
-    });
+    Parser parser(std::span{argv, (size_t)argc}, Options{});
 
     Result result = parser
     .set({
@@ -19,6 +32,8 @@ int main(int argc, char **argv)
         .description = "this is a cool bool flag",
         .data = false,
         .type = Bool,
+        // will be called if the flag was triggered
+        .fn = b_fn,
     })
     .set({
         .name = "num",
@@ -45,16 +60,16 @@ int main(int argc, char **argv)
 
     if (!result.ok)
     {
-        std::cout << "on flag " << result.flag_id << " error: " << result.error << '\n';
+        report_result(result);
         return 0;
     }
 
-    // an alias can also be used for lookups
-    Flag &b_flag = parser.table()["b"]; 
+    // must be called to call the flag functions
+    result = parser.call();
 
-    if (b_flag.triggered)
-        std::cout << "b was triggered!\n";
-
+    if (!result.ok)
+        report_result(result);
+}
 ```
 
 ## Types 
