@@ -24,7 +24,13 @@ void report_result(Result result)
 int main(int argc, char **argv)
 {
 
-    Parser parser(std::span{argv, (size_t)argc}, Options{});
+    Parser parser(std::span{argv, (size_t)argc}, Options{
+        .flag_prefix = "--",
+        // the string that separates the flag name and value
+        .separator = ":",
+        // makes it so that the parser will fail if an unknown flag is used
+        .strict_flags = true,
+    });
 
     Result result = parser
     .set({
@@ -76,26 +82,28 @@ int main(int argc, char **argv)
 
 ### Flag 
 ```cpp
-    struct Flag 
+    struct Flag
     {
         // the name of the flag
         std::string_view name;
-
+        
         // the flag description
         std::string_view description;
-
+        
         // the actual data of the flag. its also the default value if set.
         FlagData data{};
-
+        
         // the type of the flag. by default it will be Any
         Type type = String;
-
+        
         // the flag aliases
         std::initializer_list<std::string_view> aliases;
-
+        
+        // the function that will be called when the flag is triggered. must call Parser::call.
+        FlagFn fn = nullptr;
+        
         // will be set to true if the flag is ever triggered
         bool triggered = false;
-
     };
 ```
 
@@ -117,6 +125,8 @@ int main(int argc, char **argv)
     {
         // the prefix used for all flag names
         std::string_view flag_prefix = "-";
+        // the characters that will be used to separate the flag name and value
+        std::string_view separator = "=";
         // when set to true the parse function will fail when an incorrect flag is used
         bool strict_flags = true;
     };

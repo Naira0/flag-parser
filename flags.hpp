@@ -12,7 +12,7 @@
 
 namespace flag
 {
-    // the type of a flag
+    // the type of a Flag
     enum Type : uint8_t 
     {
         String, Number, Bool 
@@ -52,6 +52,7 @@ namespace flag
         // the flag aliases
         std::initializer_list<std::string_view> aliases;
 
+        // the function that will be called when the flag is triggered. must call Parser::call.
         FlagFn fn = nullptr;
 
         // will be set to true if the flag is ever triggered
@@ -69,6 +70,8 @@ namespace flag
     {
         // the prefix used for all flag names
         std::string_view flag_prefix = "-";
+        // the characters that will be used to separate the flag name and value
+        std::string_view separator = "=";
         // when set to true the parse function will fail when an incorrect flag is used
         bool strict_flags = true;
     };
@@ -114,20 +117,9 @@ namespace flag
 
                 size_t prefix_end = m_options.flag_prefix.size();
 
-                bool found_seperator = false;
+                auto [sep_start, found_sep] = parse_flag(arg, prefix_end);
 
-                size_t i;
-
-                for (i = prefix_end; i < arg.size(); i++)
-                {
-                    if (arg[i] == '=')
-                    {
-                        found_seperator = true;
-                        break;
-                    }
-                }
-
-                std::string_view id = arg.substr(prefix_end, i-prefix_end);
+                std::string_view id = arg.substr(prefix_end, sep_start - prefix_end);
 
                 auto flag_opt = get(id);
 
@@ -151,8 +143,8 @@ namespace flag
 
                 Result fail_result {false, id, "could not set flag value"};
 
-                if (found_seperator && ++i < arg.size())
-                    value_str = arg.substr(i); 
+                if (found_sep && ++sep_start < arg.size())
+                    value_str = arg.substr(sep_start);
                 else if (a+1 < m_args.size())
                     value_str = m_args[++a];
                 else
@@ -172,7 +164,6 @@ namespace flag
         {
             for (Flag &flag : m_flags)
             {
-                std::cout << flag.name << " " << flag.triggered << '\n';
                 if (flag.triggered && flag.fn)
                 {
                     Result result = (*flag.fn)(flag);
@@ -266,6 +257,31 @@ namespace flag
             }
 
             return true; 
+        }
+
+        std::pair<size_t, bool> parse_flag(std::string_view str, size_t offset = 0)
+        {
+            std::string_view sep = m_options.separator;
+
+            for (size_t i = offset; i < str.size(); i++)
+            {
+                if (str[i] == sep[0])
+                {
+                    bool found = true;
+                    size_t j;
+
+                    for (j = i; j < sep.size(); j++, i++)
+                    {
+                        if (str[i] != sep[j])
+                            found = false;
+                    }
+
+                    if (found)
+                        return {j, true};
+                }
+            }
+
+            return {str.size(), false};
         }
 
         bool set_value(std::string_view str, Flag &flag)
