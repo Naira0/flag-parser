@@ -7,8 +7,9 @@
 #include <unordered_map>
 #include <charconv>
 #include <thread>
+#include <list>
+#include <optional>
 
-// TODO weird ass bug that makes it so some values wont ever be changed usually the first value set.
 namespace flag
 {
     // the type of a flag
@@ -58,9 +59,11 @@ namespace flag
 
     };
 
-
+    // a lookup table of flags. keys can be aliases or the flag name.
     using FlagTable = std::unordered_map<std::string_view, Flag*>;
-    using Flags     = std::vector<Flag>;
+
+    // a list of flags. uses a list instead of a vector to avoid invalidating the references of the lookup table as it resizes.
+    using Flags = std::list<Flag>;
 
     struct Options 
     {
@@ -69,8 +72,6 @@ namespace flag
         // when set to true the parse function will fail when an incorrect flag is used
         bool strict_flags = true;
     };
-
-
 
     class Parser 
     {
@@ -82,7 +83,8 @@ namespace flag
         Parser(View args, Options options) :
             m_options(options),
             m_args(args)
-        {}
+        {
+        }
 
         Parser& set(Flag &&flag)
         {
@@ -91,7 +93,7 @@ namespace flag
             m_table.emplace(flag.name, &f);
 
             for (auto alias : f.aliases)
-                m_table[alias] = &f;
+                m_table.emplace(alias, &f);
 
             return *this;
         }
@@ -127,15 +129,21 @@ namespace flag
 
                 std::string_view id = arg.substr(prefix_end, i-prefix_end);
 
-                if (m_options.strict_flags && !m_table.contains(id))
-                    return Result{false, id, "invalid flag id used"};
+                auto flag_opt = get(id);
 
-                Flag &flag = *m_table[id];
-
-                if (flag.type == Bool)
+                if (!flag_opt.has_value())
                 {
-                    flag.data = true;
-                    flag.triggered = true;
+                    if (m_options.strict_flags)
+                        return Result{false, id, "invalid flag id used"};
+                    else continue;
+                }
+
+                Flag *flag = flag_opt.value();
+
+                if (flag->type == Bool)
+                {
+                    flag->data = true;
+                    flag->triggered = true;
                     continue;
                 }
 
@@ -150,7 +158,7 @@ namespace flag
                 else
                     return fail_result;
                 
-                bool ok = set_value(value_str, flag);
+                bool ok = set_value(value_str, *flag);
 
                 if (!ok)
                     return fail_result;
@@ -164,6 +172,7 @@ namespace flag
         {
             for (Flag &flag : m_flags)
             {
+                std::cout << flag.name << " " << flag.triggered << '\n';
                 if (flag.triggered && flag.fn)
                 {
                     Result result = (*flag.fn)(flag);
@@ -196,6 +205,17 @@ namespace flag
         FlagTable& table()
         {
             return m_table;
+        }
+
+        // a shorthand for looking up flags by alias or name. checks to see if the flag is valid beforehand and returns an optional to the flag pointer.
+        std::optional<Flag*> get(std::string_view id) const
+        {
+            auto it = m_table.find(id);
+
+            if (it == m_table.end())
+                return {};
+
+            return { it->second };
         }
 
         std::string to_string() const 
